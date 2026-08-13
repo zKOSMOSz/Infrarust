@@ -1,0 +1,48 @@
+name: Build Infrarust (wasm)
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - ".github/workflows/build-infrarust-wasm.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout upstream Infrarust
+        uses: actions/checkout@v4
+        with:
+          repository: Shadowner/Infrarust
+          ref: main
+
+      - name: Install Rust stable
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache cargo
+        uses: Swatinem/rust-cache@v2
+
+      - name: Build release with wasm
+        run: cargo build --release -p infrarust --features wasm
+
+      - name: Package binary
+        run: |
+          mkdir -p dist
+          cp target/release/infrarust dist/infrarust-linux-x86_64-wasm
+          chmod +x dist/infrarust-linux-x86_64-wasm
+          ./dist/infrarust-linux-x86_64-wasm --version
+          tar -C dist -czf infrarust-linux-x86_64-wasm.tar.gz infrarust-linux-x86_64-wasm
+          ls -lh dist/ infrarust-linux-x86_64-wasm.tar.gz
+
+      - name: Upload binary artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: infrarust-linux-x86_64-wasm
+          path: |
+            dist/infrarust-linux-x86_64-wasm
+            infrarust-linux-x86_64-wasm.tar.gz
+          if-no-files-found: error
+          retention-days: 14
