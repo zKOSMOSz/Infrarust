@@ -25,6 +25,20 @@ jobs:
       - name: Cache cargo
         uses: Swatinem/rust-cache@v2
 
+      - name: Patch sha2 0.11 hex formatting
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path("crates/infrarust-loader-wasm/src/cache.rs")
+          text = p.read_text()
+          old = 'format!("{:x}", hasher.finalize())'
+          new = 'hasher.finalize().iter().map(|b| format!("{:02x}", b)).collect::<String>()'
+          if old not in text:
+              raise SystemExit("patch target not found — upstream may have fixed this")
+          p.write_text(text.replace(old, new, 1))
+          print("patched OK")
+          PY
+
       - name: Build release with wasm
         run: cargo build --release -p infrarust --features wasm
 
@@ -35,7 +49,6 @@ jobs:
           chmod +x dist/infrarust-linux-x86_64-wasm
           ./dist/infrarust-linux-x86_64-wasm --version
           tar -C dist -czf infrarust-linux-x86_64-wasm.tar.gz infrarust-linux-x86_64-wasm
-          ls -lh dist/ infrarust-linux-x86_64-wasm.tar.gz
 
       - name: Upload binary artifact
         uses: actions/upload-artifact@v4
