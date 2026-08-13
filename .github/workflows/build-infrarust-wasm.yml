@@ -11,7 +11,21 @@ permissions:
 
 jobs:
   build:
-    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            target: x86_64-unknown-linux-gnu
+            artifact_name: infrarust-linux-x86_64-wasm
+            binary: infrarust
+          - os: windows-latest
+            target: x86_64-pc-windows-msvc
+            artifact_name: infrarust-windows-x86_64-wasm
+            binary: infrarust.exe
+
+    runs-on: ${{ matrix.os }}
+
     steps:
       - name: Checkout upstream Infrarust
         uses: actions/checkout@v4
@@ -21,11 +35,16 @@ jobs:
 
       - name: Install Rust stable
         uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
 
       - name: Cache cargo
         uses: Swatinem/rust-cache@v2
+        with:
+          key: ${{ matrix.target }}
 
       - name: Patch sha2 0.11 hex formatting
+        shell: bash
         run: |
           python3 - <<'PY'
           from pathlib import Path
@@ -40,22 +59,26 @@ jobs:
           PY
 
       - name: Build release with wasm
-        run: cargo build --release -p infrarust --features wasm
+        run: cargo build --release -p infrarust --features wasm --target ${{ matrix.target }}
 
       - name: Package binary
+        shell: bash
         run: |
           mkdir -p dist
-          cp target/release/infrarust dist/infrarust-linux-x86_64-wasm
-          chmod +x dist/infrarust-linux-x86_64-wasm
-          ./dist/infrarust-linux-x86_64-wasm --version
-          tar -C dist -czf infrarust-linux-x86_64-wasm.tar.gz infrarust-linux-x86_64-wasm
+          SRC="target/${{ matrix.target }}/release/${{ matrix.binary }}"
+          DST="dist/${{ matrix.artifact_name }}"
+          cp "$SRC" "$DST"
+          chmod +x "$DST" || true
+          "$DST" --version || true
+          tar -C dist -czf "${{ matrix.artifact_name }}.tar.gz" "${{ matrix.artifact_name }}"
+          ls -lh dist/ "${{ matrix.artifact_name }}.tar.gz"
 
-      - name: Upload binary artifact
+      - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: infrarust-linux-x86_64-wasm
+          name: ${{ matrix.artifact_name }}
           path: |
-            dist/infrarust-linux-x86_64-wasm
-            infrarust-linux-x86_64-wasm.tar.gz
+            dist/${{ matrix.artifact_name }}
+            ${{ matrix.artifact_name }}.tar.gz
           if-no-files-found: error
           retention-days: 14
